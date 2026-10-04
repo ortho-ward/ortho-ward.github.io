@@ -302,6 +302,7 @@ button,input,select,textarea{font:inherit;color:inherit}
 /* ---------- 大字模式下的宽度 ---------- */
 /* ---------- 左滑操作 ---------- */
 .swipe-wrap{position:relative;margin-bottom:10px;border-radius:var(--radius);overflow:hidden}
+.swipe-wrap{touch-action:pan-y}   /* 横向手势交给左滑处理，上下滑动仍是正常翻页 */
 .swipe-wrap .swipe-actions{
   position:absolute;right:0;top:0;bottom:0;display:flex;
 }
@@ -317,7 +318,6 @@ button,input,select,textarea{font:inherit;color:inherit}
   margin-bottom:0;position:relative;z-index:1;
   transition:transform .22s ease-out;
   background:var(--card);
-  touch-action:pan-y;   /* 横向手势交给左滑处理，上下滑动仍是正常翻页 */
 }
 .swipe-wrap .pcard.dragging{transition:none}
 
@@ -434,7 +434,7 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
   var LS_KEY = 'wardround.v1';
   var SNAP_PREFIX = 'wardround.snap.';
   var SNAP_KEEP = 7;
-  var APP_VERSION = '1.1.1';
+  var APP_VERSION = '1.1.2';
 
   var SEXES = ['男', '女'];
   var EVENT_KINDS = ['异常检查结果', '术后检查'];
@@ -707,6 +707,8 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
   /* ---------------- 渲染 ---------------- */
 
   /* ---------- 卡片左滑：露出"语音 / 已读"两个按钮 ---------- */
+  var lastSwipeEnd = 0;
+
   function closeAllSwipes() {
     var opens = document.querySelectorAll('.swipe-wrap .pcard[data-open="1"]');
     for (var i = 0; i < opens.length; i++) {
@@ -725,14 +727,15 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
     var acts = wrap.querySelector('.swipe-actions');
     if (!inner || !acts) return;
     var x0 = 0, y0 = 0, dx = 0, dragging = false, decided = false, swiping = false, W = 0;
-    inner.addEventListener('touchstart', function (e) {
+    /* 手势挂在整行上：左滑露出按钮后，从按钮那一侧往右滑也能收回 */
+    wrap.addEventListener('touchstart', function (e) {
       if (e.touches.length !== 1) return;
       x0 = e.touches[0].clientX; y0 = e.touches[0].clientY;
       dragging = true; decided = false; swiping = false; dx = 0;
       W = acts.offsetWidth;
       inner.classList.add('dragging');
     }, { passive: true });
-    inner.addEventListener('touchmove', function (e) {
+    wrap.addEventListener('touchmove', function (e) {
       if (!dragging) return;
       var x = e.touches[0].clientX - x0, y = e.touches[0].clientY - y0;
       if (!decided) {
@@ -750,19 +753,20 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
       if (!dragging) return;
       dragging = false;
       inner.classList.remove('dragging');
-      var base = inner.dataset.open === '1' ? -W : 0;
-      var finalDx = Math.max(-W, Math.min(0, base + dx));
-      var open = finalDx < -W / 2;
+      /* 只是点了一下、或上下滚动：保持原状，交给点击逻辑处理 */
+      if (!swiping) return;
+      /* 注意：dx 已经是"当前应该停留的绝对位置"（起始位置+位移），不能再加一次起始位置 */
+      var open = dx < -W / 2;
       if (open) closeAllSwipes();
       inner.dataset.open = open ? '1' : '0';
       inner.style.transform = open ? ('translateX(' + (-W) + 'px)') : 'translateX(0)';
-      if (swiping) {
-        inner.dataset.swiped = '1';
-        setTimeout(function () { inner.dataset.swiped = ''; }, 400);
-      }
+      /* 刚滑完的这一下不要再当成点击，免得误碰按钮 */
+      lastSwipeEnd = Date.now();
+      inner.dataset.swiped = '1';
+      setTimeout(function () { inner.dataset.swiped = ''; }, 400);
     };
-    inner.addEventListener('touchend', end);
-    inner.addEventListener('touchcancel', end);
+    wrap.addEventListener('touchend', end);
+    wrap.addEventListener('touchcancel', end);
   }
 
   function render() {
@@ -1477,7 +1481,10 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
   function bind() {
     document.addEventListener('click', function (ev) {
       var el = findAction(ev.target);
-      if (!el) return;
+      /* 点在空白处：把左滑露出来的操作收回去 */
+      if (!el) { closeAllSwipes(); return; }
+      /* 刚滑完的那一下不算点击，免得滑动时误碰"语音 / 已读" */
+      if (Date.now() - lastSwipeEnd < 350 && ev.target.closest && ev.target.closest('.swipe-wrap')) return;
       var act = el.dataset.act;
       var p = view.patientId ? getPatient(view.patientId) : null;
 
@@ -1486,6 +1493,7 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
           view.tab = el.dataset.tab; view.patientId = null; render(); window.scrollTo(0, 0); return;
         case 'open':
           if (el.dataset.swiped === '1') return;      /* 刚才是滑动，不当作点击 */
+          if (el.dataset.open === '1') { closeAllSwipes(); return; }  /* 已经滑开时，点一下只是收回 */
           closeAllSwipes();
           view.patientId = el.dataset.id; render(); $('view').scrollTop = 0; return;
         case 'quick-voice': closeAllSwipes(); openQuickVoice(el.dataset.id); return;
