@@ -434,7 +434,7 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
   var LS_KEY = 'wardround.v1';
   var SNAP_PREFIX = 'wardround.snap.';
   var SNAP_KEEP = 7;
-  var APP_VERSION = '1.1.0';
+  var APP_VERSION = '1.1.1';
 
   var SEXES = ['男', '女'];
   var EVENT_KINDS = ['异常检查结果', '术后检查'];
@@ -2044,6 +2044,22 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
      ============================================================ */
 
   var OCR_DIR = './ocr/';
+  var ocrBase = null;
+  /* 引擎文件放在 ./ocr/ 里；万一上传时把文件直接放到了仓库根目录，也能自动找到 */
+  function findOcrBase() {
+    if (ocrBase) return Promise.resolve(ocrBase);
+    var probe = function (base) {
+      return fetch(base + 'tesseract.min.js').then(function (r) {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.blob().then(function () { return base; });
+      });
+    };
+    var ok = function (b) { ocrBase = b; return b; };
+    var bad = function () { ocrBase = OCR_DIR; return ocrBase; };
+    return probe(OCR_DIR).then(ok, function () {
+      return probe('./').then(ok, bad);
+    });
+  }
   var OCR_READY_KEY = 'wardround.ocrReady';
   var OCR_MODE_KEY = 'wardround.ocrMode';
   var AI_KEY = 'wardround.ai';
@@ -2096,18 +2112,20 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
   /* 后台悄悄把识别引擎存到本机，存好后断网也能识别 */
   function prefetchOcr() {
     if (ocrReady() || !navigator.onLine) return;
-    var list = ocrAssets(), i = 0;
-    function next() {
-      if (i >= list.length) {
-        try { localStorage.setItem(OCR_READY_KEY, '1'); } catch (e) { }
-        return;
+    findOcrBase().then(function (base) {
+      var list = ocrAssets(), i = 0;
+      function next() {
+        if (i >= list.length) {
+          try { localStorage.setItem(OCR_READY_KEY, '1'); } catch (e) { }
+          return;
+        }
+        fetch(base + list[i++]).then(function (r) {
+          if (!r.ok) throw new Error('HTTP ' + r.status);   /* 404 等不能算下载成功 */
+          return r.blob();
+        }).then(next).catch(function () { });
       }
-      fetch(OCR_DIR + list[i++]).then(function (r) {
-        if (!r.ok) throw new Error('HTTP ' + r.status);   /* 404 等不能算下载成功 */
-        return r.blob();
-      }).then(next).catch(function () { });
-    }
-    next();
+      next();
+    });
   }
 
   /* 挨个探测引擎文件在不在，用来给出明确提示（离线时跳过） */
@@ -2118,21 +2136,24 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
       return Promise.resolve(ocrProbeState);
     }
     var list = ocrAssets(), missing = [];
-    return Promise.all(list.map(function (n) {
-      return fetch(OCR_DIR + n, { method: 'HEAD' }).then(function (r) {
-        if (!r.ok) missing.push(n + '（' + r.status + '）');
-      }).catch(function () { missing.push(n + '（连不上）'); });
-    })).then(function () {
+    return findOcrBase().then(function (base) {
+      return Promise.all(list.map(function (n) {
+        return fetch(base + n).then(function (r) {
+          if (!r.ok) missing.push(n + '（' + r.status + '）');
+          else return r.blob();
+        }).catch(function () { missing.push(n + '（连不上）'); });
+      }));
+    }).then(function () {
       ocrProbeState = { offline: false, missing: missing };
       return ocrProbeState;
     });
   }
 
-  function loadTesseractScript() {
+  function loadTesseractScript(base) {
     return new Promise(function (res, rej) {
       if (window.Tesseract) return res();
       var s = document.createElement('script');
-      s.src = OCR_DIR + 'tesseract.min.js';
+      s.src = base + 'tesseract.min.js';
       s.onload = function () { res(); };
       s.onerror = function () { rej(new Error('识别引擎文件没能加载')); };
       document.head.appendChild(s);
@@ -2141,12 +2162,14 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
 
   function ensureWorker(onProgress) {
     if (ocrWorker) return Promise.resolve(ocrWorker);
-    return loadTesseractScript().then(function () {
-      return Tesseract.createWorker('chi_sim', 1, {
-        workerPath: OCR_DIR + 'worker.min.js',
-        corePath: OCR_DIR + ocrCoreFile(),
-        langPath: OCR_DIR.replace(/\/$/, ''),
-        logger: function (m) { if (onProgress) onProgress(m); }
+    return findOcrBase().then(function (base) {
+      return loadTesseractScript(base).then(function () {
+        return Tesseract.createWorker('chi_sim', 1, {
+          workerPath: base + 'worker.min.js',
+          corePath: base + ocrCoreFile(),
+          langPath: base.replace(/\/$/, ''),
+          logger: function (m) { if (onProgress) onProgress(m); }
+        });
       });
     }).then(function (w) { ocrWorker = w; return w; });
   }
