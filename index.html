@@ -434,7 +434,8 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
   var LS_KEY = 'wardround.v1';
   var SNAP_PREFIX = 'wardround.snap.';
   var SNAP_KEEP = 7;
-  var APP_VERSION = '1.1.2';
+  var INSTALL_KEY = 'wardround.installId';
+  var APP_VERSION = '1.1.4';
 
   var SEXES = ['男', '女'];
   var EVENT_KINDS = ['异常检查结果', '术后检查'];
@@ -595,6 +596,20 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
     }
   }
   var loadError = false;
+
+  /* 这份"存储容器"的编号。
+     iPhone 会把「添加到主屏幕」的网页当成独立 App，它和 Safari 的存储互不相通；
+     两边即使网址一模一样，编号也会不同 —— 用它来判断眼前是哪一份数据。 */
+  function installId() {
+    var v = '';
+    try { v = localStorage.getItem(INSTALL_KEY) || ''; } catch (e) { }
+    if (!v) {
+      v = 'ZC' + Math.random().toString(36).slice(2, 5).toUpperCase() +
+        ('0000' + (Date.now() % 100000)).slice(-5);
+      try { localStorage.setItem(INSTALL_KEY, v); } catch (e) { }
+    }
+    return v;
+  }
 
   function normalize(d) {
     var out = { version: 1, updatedAt: d.updatedAt || '', patients: [] };
@@ -805,7 +820,12 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
     var items = buildTodo();
     if (!inWard().length) {
       return '<div class="empty"><span class="big">🛏️</span>还没有患者。<br>点下面的按钮添加第一位患者。</div>' +
-        '<button class="btn primary block addbtn" data-act="add-patient">＋ 添加患者</button>';
+        '<button class="btn primary block addbtn" data-act="add-patient">＋ 添加患者</button>' +
+        '<div class="card hint" style="margin-top:12px;line-height:1.8">' +
+        '如果你<b>以前记过患者</b>、打开却是空的：iPhone 把桌面图标当成一个独立 App，它的存储和 Safari（浏览器）' +
+        '<b>互不相通</b>，所以浏览器里那份不会自动出现在这里。把记录搬过来就行。</div>' +
+        '<button class="btn block" data-act="move-help" style="margin-top:8px">📥 从浏览器把记录搬过来（三步）</button>' +
+        '<button class="btn block" data-act="import-json" style="margin-top:8px">📄 我已有备份文件，直接导入</button>';
     }
     if (!items.length) {
       return '<div class="empty"><span class="big">✅</span>今天没有需要专门盯的患者。<br><span class="hint">（复查到期、结果待处理、术后第1/3/7/14天会自动出现在这里）</span></div>';
@@ -1299,7 +1319,27 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
     h += '<div class="setgrp">' +
       setRow('postop-days', '📅', '术后关注天数', '现在是第 ' + postopDays().join('、') + ' 天自动进待办') +
       '</div>';
+
+    /* iPhone 会把「添加到主屏幕」的网页当成独立 App，它和 Safari 的存储互不相通；
+       这里把"网址 + 本机编号"都显示出来，用来判断眼前是哪一份数据。 */
+    var here = '';
+    try { here = location.origin + location.pathname; } catch (e) { here = ''; }
+    h += '<div class="section-title">本机信息</div><div class="setgrp">' +
+      '<div class="setrow" data-act="copy-url"><div style="font-size:20px">🔗</div>' +
+      '<div class="n">当前网址<div class="sub2" style="word-break:break-all">' + esc(here || '（本机文件）') +
+      '</div></div><div class="arw">复制</div></div>' +
+      '<div class="setrow" style="display:block;cursor:default"><div class="n">本机编号' +
+      '<div class="sub2" style="font-size:17px;letter-spacing:1px;color:var(--pri)">' + esc(installId()) +
+      '</div><div class="sub2">浏览器里和桌面图标里各看一次：<b>编号不同 = 两份数据</b></div></div></div>' +
+      '<div class="setrow" style="display:block;cursor:default"><div class="hint" style="line-height:1.7;padding:4px 0">' +
+      'iPhone 把<b>桌面图标</b>当成一个独立 App：它和 Safari（浏览器）的存储<b>互不相通</b>，' +
+      '即使网址一模一样，也是两份数据。记录只存在打开它的那个容器里。<br>' +
+      '要把记录从浏览器搬到桌面图标：在上面那份里「导出完整备份」→ 存到「文件」→ 在这里「导入备份恢复」。' +
+      '</div></div>' +
+      '</div>';
+
     h += '<div class="setgrp">' +
+      setRow('move-help', '📥', '从浏览器把记录搬过来', '桌面图标和浏览器是两份存储，点这里看三步做法') +
       setRow('selftest', '🧪', '运行自检', '检查排序、待办规则、存储是否正常') +
       setRow('clear-all', '🗑️', '清空全部数据', '不可恢复，请先导出备份') +
       '</div>';
@@ -1623,6 +1663,50 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
         case 'export-excel': exportExcel(); return;
         case 'export-json': exportJson(); return;
         case 'import-json': importJson(); return;
+        case 'move-help': {
+          openSheet({
+            title: '从浏览器把记录搬过来',
+            hideOk: true,
+            body: '<div style="line-height:1.85;font-size:15px;padding:2px 2px 6px">' +
+              'iPhone 会把「添加到主屏幕」的网页当成<b>一个独立 App</b>：它和 Safari 的存储<b>互不相通</b>，' +
+              '即使网址一模一样，也是两份数据。<br><br>' +
+              '<b>第 1 步（在浏览器里做）</b><br>' +
+              '用 Safari 打开这个网址 → 右上角「⋯」→「导出完整备份(JSON)」→ 在分享面板里选「存储到"文件"」。<br><br>' +
+              '<b>第 2 步（回到桌面图标里做）</b><br>' +
+              '右上角「⋯」→「导入备份恢复」。<br><br>' +
+              '<b>第 3 步</b><br>' +
+              '在「浏览」里找到刚存的「查房备份_日期.json」，选它，核对病区里患者都在。<br><br>' +
+              '<span style="color:#b45309">搬完之后请固定用桌面图标</span>，别再在 Safari 里录，两边就不会各记一份。' +
+              '（在桌面图标里也能「导出完整备份」，一样能用。）' +
+              '</div>' +
+              '<button class="btn primary block" data-act="move-import">📥 现在导入备份文件</button>'
+          });
+          return;
+        }
+        case 'move-import': closeSheet(false); setTimeout(function () { importJson(); }, 260); return;
+        case 'copy-url': {
+          var here = '';
+          try { here = location.origin + location.pathname; } catch (e) { here = ''; }
+          if (!here) { toast('本机文件打开时没有网址'); return; }
+          var doneCopy = function () { toast('网址已复制'); };
+          var failCopy = function () {
+            /* 老浏览器没有剪贴板接口：退回到"选中＋复制" */
+            try {
+              var tmp = document.createElement('textarea');
+              tmp.value = here;
+              tmp.style.cssText = 'position:fixed;left:-9999px';
+              document.body.appendChild(tmp);
+              tmp.select();
+              document.execCommand('copy');
+              tmp.remove();
+              doneCopy();
+            } catch (e) { toast('复制失败，请手动抄下网址：' + here); }
+          };
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(here).then(doneCopy, failCopy);
+          } else failCopy();
+          return;
+        }
         case 'selftest': location.search = '?selftest=1'; return;
         case 'postop-days': {
           openSheet({
@@ -1930,6 +2014,52 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
         if (rs[0].diagnosis.indexOf('股骨颈骨折') < 0) return '第1条诊断没解析出来：' + rs[0].diagnosis;
         return true;
       });
+      chk('识别解析：床号不在最前面也算（顺序不固定）', function () {
+        var t = '王秀兰 女 68岁 12床 右股骨颈骨折\n' +
+          '李建国 男 72岁 13床 左股骨粗隆间骨折\n' +
+          '张桂英 女 81岁 15床 右股骨颈骨折';
+        var rs = parseHisText(t);
+        var want = [['12', '王秀兰', '女', '68'], ['13', '李建国', '男', '72'], ['15', '张桂英', '女', '81']];
+        if (rs.length !== want.length) return '解析出 ' + rs.length + ' 条，应为 ' + want.length + ' 条';
+        for (var i = 0; i < want.length; i++) {
+          var r = rs[i], w = want[i];
+          if (r.bed !== w[0] || r.name !== w[1] || r.sex !== w[2] || r.age !== w[3]) {
+            return '第' + (i + 1) + '条：' + [r.bed, r.name, r.sex, r.age].join('/') + '，应为 ' + w.join('/');
+          }
+        }
+        return true;
+      });
+      chk('识别解析：顺序打乱 + 一句多人（无空格）', function () {
+        var rs = parseHisText('王秀兰女六十八岁十二床右股骨颈骨折 李建国男七十二岁十三床左股骨粗隆间骨折');
+        if (rs.length !== 2) return '解析出 ' + rs.length + ' 条，应为 2 条';
+        if (rs[0].bed !== '12' || rs[0].name !== '王秀兰' || rs[0].age !== '68') {
+          return '第1条：' + [rs[0].bed, rs[0].name, rs[0].age].join('/');
+        }
+        if (rs[1].bed !== '13' || rs[1].name !== '李建国' || rs[1].age !== '72') {
+          return '第2条：' + [rs[1].bed, rs[1].name, rs[1].age].join('/');
+        }
+        return true;
+      });
+      chk('识别解析：汉字数字的床号/年龄/日期', function () {
+        var t = '十二床 王秀兰 女 六十八岁 二零二六年九月二十日 右股骨颈骨折\n' +
+          '十三床 李建国 男 七十二岁 九月十八号 左股骨粗隆间骨折';
+        var rs = parseHisText(t);
+        if (rs.length !== 2) return '解析出 ' + rs.length + ' 条，应为 2 条';
+        if (rs[0].bed !== '12' || rs[0].age !== '68' || rs[0].admittedAt !== '2026-09-20') {
+          return '第1条：' + [rs[0].bed, rs[0].age, rs[0].admittedAt].join('/');
+        }
+        if (rs[1].bed !== '13' || rs[1].age !== '72') return '第2条：' + [rs[1].bed, rs[1].age].join('/');
+        if (!/^\d{4}-09-18$/.test(rs[1].admittedAt)) return '第2条日期：' + rs[1].admittedAt;
+        return true;
+      });
+      chk('识别解析：不会把"骨伤六区""十二指肠"里的数字乱改', function () {
+        var rs = parseHisText('六床 王秀兰 女 六十八岁 骨伤六区 右股骨颈骨折');
+        if (rs.length !== 1) return '解析出 ' + rs.length + ' 条';
+        if (rs[0].bed !== '6' || rs[0].age !== '68') return '床号/年龄：' + [rs[0].bed, rs[0].age].join('/');
+        if (rs[0].name !== '王秀兰') return '姓名：' + rs[0].name;
+        if (rs[0].diagnosis.indexOf('股骨颈骨折') < 0) return '诊断：' + rs[0].diagnosis;
+        return true;
+      });
       chk('语音解析：一句话抠出时间/内容/处理/复查', function () {
         var v = parseUtterance('今天早上血常规白细胞12.3升高，处理是加用抗生素，三天后复查', 'event');
         if (v.at.indexOf(todayStr() + 'T08:00') !== 0) return '时间不对：' + v.at;
@@ -1954,6 +2084,18 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
         var want = y.getFullYear() + '-' + pad2(y.getMonth() + 1) + '-' + pad2(y.getDate()) + 'T15:00';
         if (v.at !== want) return '时间不对：' + v.at;
         if (v.status !== '已复查未解除') return '状态不对：' + v.status;
+        return true;
+      });
+      chk('语音解析：汉字数字的时间（下午三点半、九月二十号）', function () {
+        var v = parseUtterance('昨天下午三点半复查血常规，白细胞9.8', 'follow');
+        var y = new Date(); y.setDate(y.getDate() - 1);
+        var want = y.getFullYear() + '-' + pad2(y.getMonth() + 1) + '-' + pad2(y.getDate()) + 'T15:30';
+        if (v.at !== want) return '时间不对：' + v.at;
+        if (v.content.indexOf('白细胞9.8') < 0) return '内容不对：' + v.content;
+        var v2 = parseUtterance('九月二十号复查血常规', 'event');
+        if (!/^\d{4}-09-20$/.test(v2.next)) return '复查日期不对：' + v2.next;
+        var v3 = parseUtterance('切口有一点红肿', 'note');
+        if (v3.at) return '「一点」被误当成时间了：' + v3.at;
         return true;
       });
       chk('术后关注天数可自行设定', function () {
@@ -1989,7 +2131,8 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
           'selftest', 'clear-all', 'restore-snap',
           'ai-mode', 'ai-url', 'ai-key', 'ai-model',
           'sheet-save-next', 'fill-diag', 'postop-days', 'read-event',
-          'quick-voice', 'mark-read', 'vb-fill', 'qv-parse', 'qv-manual'];
+          'quick-voice', 'mark-read', 'vb-fill', 'qv-parse', 'qv-manual', 'copy-url',
+          'move-help', 'move-import'];
         var html = renderTodo() + renderWard() + renderArchive() +
           (state.patients[0] ? renderPatient(state.patients[0]) : '') + renderSettings();
         var re = /data-act="([^"]+)"/g, m, missing = [], seen = {};
@@ -2348,154 +2491,319 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
     '椎间盘', '滑脱', '囊肿', '积液', '血栓', '水肿', '衰竭', '肿瘤', '关节炎', '骨病', '腱鞘', '断裂',
     '损伤', '劳损', '溃疡', '变性', '退变', '综合征', '病', '症', '炎', '瘤', '伤', '癌'];
 
+  /* 病名里"一定不是姓名"的强词（用来剔除把诊断当成姓名的误判） */
+  var DISEASE_STRONG = ['骨折', '脱位', '坏死', '狭窄', '感染', '结核', '关节炎', '肿瘤', '结石', '畸形',
+    '滑脱', '损伤', '断裂', '积液', '血栓', '骨质疏松', '椎间盘', '腱鞘', '囊肿', '溃疡', '劳损', '变性',
+    '退变', '综合征', '置换', '融合', '减压'];
+
+  /* ---------------- 中文数字 ----------------
+     语音转文字、输入法经常把"十二床""六十八岁""九月二十日"写成汉字数字。
+     这里只在"床/岁/年/月/日/号/点/分/天"这些有明确上下文的位置替换成阿拉伯数字，
+     不会去动"骨伤六区""十二指肠"这类词。 */
+  var CN_DIGIT = { '零': 0, '〇': 0, '○': 0, '一': 1, '壹': 1, '二': 2, '两': 2, '贰': 2, '三': 3, '叁': 3,
+    '四': 4, '肆': 4, '五': 5, '伍': 5, '六': 6, '陆': 6, '七': 7, '柒': 7, '八': 8, '捌': 8, '九': 9, '玖': 9 };
+  var CN_ALL = '零〇○一二三四五六七八九十百两壹贰叁肆伍陆柒捌玖拾佰';
+
+  /* 逐字读的数字：二零二六 → 2026；不是这种读法就返回空 */
+  function cnDigitSeq(s) {
+    if (!s) return '';
+    var out = '';
+    for (var i = 0; i < s.length; i++) {
+      var c = s.charAt(i);
+      if (CN_DIGIT[c] === undefined) return '';
+      out += CN_DIGIT[c];
+    }
+    return out;
+  }
+
+  /* 中文数字转阿拉伯数字：十二→12、六十八→68、一百零五→105、二零二六→2026 */
+  function cnNumToInt(s) {
+    if (s === null || s === undefined) return NaN;
+    s = String(s).replace(/\s+/g, '');
+    if (!s) return NaN;
+    if (/^\d+$/.test(s)) return parseInt(s, 10);
+    var seq = cnDigitSeq(s);
+    if (seq) return parseInt(seq, 10);
+    var total = 0, section = 0, num = 0, seen = false;
+    for (var i = 0; i < s.length; i++) {
+      var c = s.charAt(i), v = CN_DIGIT[c];
+      if (v === undefined) {
+        if (c === '十' || c === '拾') v = 10;
+        else if (c === '百' || c === '佰') v = 100;
+        else return NaN;
+      }
+      seen = true;
+      if (v === 10 || v === 100) { section += (num === 0 ? 1 : num) * v; num = 0; }
+      else num = v;
+    }
+    return seen ? section + num : NaN;
+  }
+
+  function cnNumInContext(t) {
+    var C = '([' + CN_ALL + ']{1,4})';
+    /* 十二床 → 12床；六十八岁 → 68岁 */
+    t = t.replace(new RegExp(C + '\\s*(床|岁)', 'g'), function (all, n, unit) {
+      var v = cnNumToInt(n);
+      return isNaN(v) ? all : v + unit;
+    });
+    /* 二零二六年 → 2026年 */
+    t = t.replace(new RegExp('([' + CN_ALL + ']{2,4})\\s*年', 'g'), function (all, n) {
+      var v = cnNumToInt(n);
+      return isNaN(v) ? all : v + '年';
+    });
+    /* 九月二十日 → 9月20日；下午三点 → 下午3点；三天 → 3天 */
+    t = t.replace(new RegExp(C + '\\s*(月|日|号|点|时|分|天|周)', 'g'), function (all, n, unit) {
+      var v = cnNumToInt(n);
+      return isNaN(v) ? all : v + unit;
+    });
+    return t;
+  }
+
   function normalizeOcrText(t) {
-    return String(t || '')
+    t = String(t || '')
       .replace(/\r/g, '')
       .replace(/[０-９]/g, function (c) { return String.fromCharCode(c.charCodeAt(0) - 0xFEE0); })
       .replace(/[Ａ-Ｚａ-ｚ]/g, function (c) { return String.fromCharCode(c.charCodeAt(0) - 0xFEE0); })
       .replace(/[\u3000\t]/g, ' ')
-      .replace(/[：]/g, ':')
+      .replace(/[：]/g, ':');
+    /* 汉字数字（只在上下文明确的地方替换） */
+    t = cnNumInContext(t);
+    return t
       .split('\n').map(function (l) { return l.replace(/^\s+|\s+$/g, ''); }).join('\n');
   }
 
   function isStop(s) { return NAME_STOP.indexOf(s) >= 0; }
   function looksLikeName(s) { return /^[\u4e00-\u9fa5]{2,4}$/.test(s) && !isStop(s); }
+  function hasDiseaseStrong(s) {
+    for (var i = 0; i < DISEASE_STRONG.length; i++) if (s.indexOf(DISEASE_STRONG[i]) >= 0) return true;
+    return false;
+  }
+  /* 紧跟在这段文字后面的就是病名（说明这段不是姓名，是诊断的前半截） */
+  function startsWithDisease(s) {
+    s = String(s || '').replace(/^[\s，,、]+/, '');
+    for (var i = 0; i < DISEASE_KW.length; i++) if (s.indexOf(DISEASE_KW[i]) === 0) return true;
+    return false;
+  }
   /* 病区名（骨伤六区之类）不是诊断，排除掉 */
   function looksLikeWard(s) { return /(病区|病房|区|科|室|楼|床)$/.test(s); }
 
-  /* 这一行是否含"登记号"——HIS 一览表里它最可靠，用它认新患者 */
-  function hasMrn(line) {
-    var m = line.match(/(?:^|\D)(\d{7,12})(?:\D|$)/);
-    if (!m) return false;
-    var digitsOnly = line.replace(/[^\d]/g, '');
-    /* 整行只有一个 2026xxxx 形式的日期，不算登记号 */
-    if (digitsOnly === m[1] && /^20\d{6}$/.test(m[1])) return false;
-    return true;
+  /* ---------------- 切成一条条"患者块" ----------------
+     不再要求"床号必须在最前面"。一行里可能连着说好几位患者，所以按"新人起点"来切：
+       ① "X床"（汉字数字已在 normalizeOcrText 里换成阿拉伯数字）
+       ② "姓名+男/女"——最像"一个人开始"的信号
+       ③ 7~12 位登记号
+       ④ HIS 表格里行首那一列床号（裸数字）
+     同一个人的多个标记会自动合并（"12床 王秀兰 女"是一条）；
+     只有"这一条已经有这个字段了，又出现一次"，才算下一位患者。 */
+  function anchorsIn(line, nextLine) {
+    var out = [], m, re, at;
+    /* ① X床 */
+    re = /(\d{1,3})\s*床/g;
+    while ((m = re.exec(line)) !== null) {
+      at = m.index;
+      if (at > 0 && /\d/.test(line.charAt(at - 1))) continue;
+      out.push({ at: at, kind: 'bed', bed: m[1] });
+    }
+    /* ② 姓名+性别（口语里常有逗号："王秀兰，女"） */
+    re = /([\u4e00-\u9fa5]{2,4})[\s，,、]*(男|女)/g;
+    while ((m = re.exec(line)) !== null) out.push({ at: m.index, kind: 'name' });
+    /* ③ 登记号（排除 20260320 这种日期） */
+    re = /(?:^|\D)(\d{7,12})(?:\D|$)/g;
+    while ((m = re.exec(line)) !== null) {
+      if (/^20\d{6}$/.test(m[1])) continue;
+      at = m.index + (m[0].length - m[0].replace(/^\D/, '').length);
+      out.push({ at: at, kind: 'mrn' });
+    }
+    /* ④ 行首裸数字（表格第一列就是床号）。竖排记录里孤零零的数字不当作床号 */
+    m = line.match(/^\s*[^\d\u4e00-\u9fa5]{0,3}(\d{1,3})(?![\d岁年月日号点时分])\s*(.*)$/);
+    if (m) {
+      var rest = m[2] || '';
+      var nextName = nextLine ? looksLikeName(String(nextLine).replace(/\s+/g, '')) : false;
+      if (rest.length >= 2 || nextName) out.push({ at: line.indexOf(m[1]), kind: 'bed', bed: m[1] });
+    }
+    out.sort(function (a, b) { return a.at - b.at; });
+    var seen = {}, uniq = [];
+    out.forEach(function (a) { if (!seen[a.at]) { seen[a.at] = 1; uniq.push(a); } });
+    return uniq;
   }
 
-  /* 把文本切成一条条"患者块" */
+  /* 这一条现在有没有某个字段（用来判断下一个标记是"同一个人"还是"下一位"） */
+  function blockState(block) {
+    if (!block) return { bed: false, name: false, mrn: false };
+    var r = parseBlock(block);
+    return { bed: !!r.bed, name: !!r.name, mrn: !!r.mrn };
+  }
+
   function splitBlocks(text) {
-    /* 语音/手打时常常一句连说好几个患者（12床张三…13床李四…），先按"X床"切开。
-       表格识别出来的行含登记号，不动它。 */
-    var raw = text.split('\n'), lines = [];
-    raw.forEach(function (L) {
-      if (hasMrn(L)) { lines.push(L); return; }
-      /* 在"12床"这样的位置切开；注意前面必须是非数字，否则 12床 会被切成 1 和 2床 */
-      var re = /(\d{1,3})\s*床/g, cuts = [], m, k;
-      while ((m = re.exec(L)) !== null) {
-        var st = m.index;
-        if (st > 0 && /\d/.test(L.charAt(st - 1))) continue;
-        cuts.push(st);
-      }
-      if (!cuts.length) { lines.push(L); return; }
-      var from = 0;
-      for (k = 0; k < cuts.length; k++) {
-        if (cuts[k] > from) lines.push(L.slice(from, cuts[k]));
-        from = cuts[k];
-      }
-      lines.push(L.slice(from));
-    });
-    var blocks = [], cur = null, i;
-    for (i = 0; i < lines.length; i++) {
-      var line = (lines[i] || '').replace(/^\s+|\s+$/g, '');
+    var lines = String(text || '').split('\n');
+    var blocks = [], cur = null;
+    for (var li = 0; li < lines.length; li++) {
+      var line = (lines[li] || '').replace(/^\s+|\s+$/g, '');
       if (!line) continue;
-      var startHere = false, bed = '';
-      /* 含登记号 → 新患者。但如果当前这条还没拿到登记号，说明这是一条竖着排的记录，应归到当前这条 */
-      if (hasMrn(line)) {
-        if (!cur || hasMrn(cur.text)) startHere = true;
+      var anchors = anchorsIn(line, lines[li + 1]);
+      if (!anchors.length) {
+        if (cur) cur.text += ' ' + line;      /* 没有"新人"标记 → 当作上一条的续行 */
+        continue;
       }
-      if (!startHere) {
-        /* 行首（允许前面有一两个标点）就是床号 */
-        var m = line.match(/^\s*[^\d\u4e00-\u9fa5]{0,3}(\d{1,3})\s*床?(?!\d)/);
-        if (m) {
-          bed = m[1];
-          var rest = line.slice(m[0].length).replace(/^\s+/, '');
-          if (rest.length >= 2) startHere = true;
-          else if (i + 1 < lines.length && looksLikeName((lines[i + 1] || '').replace(/\s+/g, ''))) startHere = true;
-        }
+      var st = blockState(cur), starts = [], a;
+      for (a = 0; a < anchors.length; a++) {
+        var an = anchors[a];
+        if (!st[an.kind]) { st[an.kind] = true; continue; }   /* 上一条还没这个字段 → 同一个人 */
+        starts.push(an.at);                                    /* 有了 → 这是下一位患者 */
+        st = { bed: false, name: false, mrn: false };
+        st[an.kind] = true;
       }
-      if (startHere) { cur = { bed: bed, text: line }; blocks.push(cur); }
-      else if (cur) { cur.text += ' ' + line; }
+      if (!starts.length) {
+        /* 所有标记都属于同一条：接到上一条后面；如果还没有上一条（文本第一行），就自己开一条 */
+        if (cur) cur.text += ' ' + line;
+        else { cur = { bed: '', text: line }; blocks.push(cur); }
+        continue;
+      }
+      var bounds = starts.slice();
+      if (bounds[0] > 0) bounds.unshift(0);
+      for (var b = 0; b < bounds.length; b++) {
+        var from = bounds[b];
+        var to = (b + 1 < bounds.length) ? bounds[b + 1] : line.length;
+        var seg = line.slice(from, to).replace(/^\s+|\s+$/g, '');
+        if (!seg) continue;
+        /* 行首那段（还没出现"新人"标记之前）并进当前这一条 */
+        if (b === 0 && cur && starts[0] > 0) { cur.text += ' ' + seg; continue; }
+        cur = { bed: '', text: seg };
+        blocks.push(cur);
+      }
     }
     return blocks;
   }
 
   function parseBlock(b) {
     var rec = {
-      bed: b.bed, name: '', sex: '', age: '', mrn: '', admittedAt: '', diagnosis: '', doubt: {}
+      bed: '', name: '', sex: '', age: '', mrn: '', admittedAt: '', diagnosis: '', doubt: {}
     };
-    var work = b.text.replace(/\s+/g, ' ').replace(/^\s+|\s+$/g, '');
-    var m, mrnIdx = -1, sexIdx = -1;
-
-    /* 1) 登记号：第一个 7~12 位数字（这一列识别最准，用它当锚点） */
-    m = work.match(/(?:^|\D)(\d{7,12})(?:\D|$)/);
-    if (m) { rec.mrn = m[1]; mrnIdx = work.indexOf(m[1]); }
-
-    /* 2) 性别：优先取登记号之后的第一个"男/女" */
-    var tailStart = mrnIdx >= 0 ? mrnIdx + rec.mrn.length : 0;
-    m = work.slice(tailStart).match(/男|女/);
-    if (m) { rec.sex = m[0]; sexIdx = tailStart + m.index; }
-    else { m = work.match(/男|女/); if (m) { rec.sex = m[0]; sexIdx = m.index; } }
-
-    /* 3) 姓名：姓名永远紧挨着性别列。
-          版式A：登记号→姓名→性别（多数 HIS），姓名夹在两者之间；
-          版式B：床号→姓名→性别→…→登记号，姓名在性别前面。 */
-    if (mrnIdx >= 0 && sexIdx > mrnIdx) {
-      var between = work.slice(mrnIdx + rec.mrn.length, sexIdx).replace(/[^\u4e00-\u9fa5]/g, '');
-      if (between.length >= 2 && between.length <= 4 && !isStop(between)) rec.name = between;
-      else if (between.length >= 5) rec.name = between.slice(0, 3);
-    } else if (sexIdx >= 0) {
-      var beforeSex = work.slice(0, sexIdx).replace(/[^\u4e00-\u9fa5]/g, '');
-      var cand = beforeSex.length <= 4 ? beforeSex : beforeSex.slice(-4);
-      cand = cand.replace(/^[床号]/, '');   /* "12床王秀兰" 里的"床"要去掉 */
-      if (/^[\u4e00-\u9fa5]{2,4}$/.test(cand) && !isStop(cand)) rec.name = cand;
+    var work = String(b.text || '').replace(/[，,、]/g, ' ').replace(/\s+/g, ' ').replace(/^\s+|\s+$/g, '');
+    var m, i;
+    function hasDiseaseAny(s) {
+      for (var q = 0; q < DISEASE_KW.length; q++) if (s.indexOf(DISEASE_KW[q]) >= 0) return true;
+      return false;
     }
 
-    /* 4) 床号：登记号之前的第一个 1~3 位数字 */
-    var before = mrnIdx > 0 ? work.slice(0, mrnIdx) : work;
-    m = before.match(/(?:^|[^\d])(\d{1,3})(?!\d)/);
-    if (m) rec.bed = m[1];
+    /* 1) 登记号 / 住院号：优先"住院号/登记号"后面那串，再找独立的 7~12 位数字 */
+    m = work.match(/(?:住院号|登记号|病案号|病历号|门诊号)\s*[:：]?\s*([A-Za-z]{0,3}\s*\d{6,12})/);
+    if (m) rec.mrn = m[1].replace(/[^\d]/g, '');
+    if (!rec.mrn) {
+      var ms = work.match(/(?:^|\D)(\d{7,12})(?:\D|$)/g) || [];
+      for (i = 0; i < ms.length; i++) {
+        var v0 = ms[i].replace(/[^\d]/g, '');
+        if (/^20\d{6}$/.test(v0)) continue;            /* 这是日期，不是登记号 */
+        rec.mrn = v0; break;
+      }
+    }
 
-    /* 5) 就诊/入院日期（只认严格格式，认不准宁可不填） */
-    m = work.match(/(20\d{2})[-\/.年](\d{1,2})[-\/.月](\d{1,2})/);
+    /* 2) 性别：第一个"男/女" */
+    m = work.match(/男|女/);
+    if (m) rec.sex = m[0];
+
+    /* 3) 姓名：四种版式都试，与顺序无关 */
+    /* 3a "姓名：王秀兰" */
+    m = work.match(/姓名\s*[:：]?\s*([\u4e00-\u9fa5]{2,4})/);
+    if (m && looksLikeName(m[1])) rec.name = m[1];
+    /* 3b "王秀兰 女"：姓名紧挨着性别（最常见） */
+    if (!rec.name) {
+      var reS = /男|女/g, sp;
+      while ((sp = reS.exec(work)) !== null) {
+        var near = work.slice(Math.max(0, sp.index - 6), sp.index).replace(/[^\u4e00-\u9fa5]+$/, '');
+        var cand = (near.match(/[\u4e00-\u9fa5]{2,4}$/) || [''])[0];
+        /* 清掉粘在姓名前面的杂字："12床王秀兰女" 的"床"、"患者王秀兰" 的"患者" */
+        cand = cand.replace(/^[床号位第]/, '').replace(/^(患者|病人|者)/, '').replace(/^[的叫做是为]/, '');
+        if (looksLikeName(cand) && !hasDiseaseStrong(cand)) { rec.name = cand; break; }
+      }
+    }
+    /* 3c "12床 王秀兰"、"12床女患者王秀兰"：姓名紧跟着床号 */
+    if (!rec.name) {
+      var mBed = work.match(/\d{1,3}\s*床\s*[:：]?\s*(.*)$/);
+      if (mBed) {
+        var after = mBed[1].replace(/^\s*的?\s*/, '')
+          .replace(/^(患者|病人|女患者|男患者)/, '').replace(/^[男女]/, '')
+          .replace(/^(患者|病人|的)/, '');
+        var cand3 = (after.match(/^([\u4e00-\u9fa5]{2,4})/) || ['', ''])[1];
+        var rest3 = after.slice(cand3.length);
+        if (cand3 && looksLikeName(cand3) && !hasDiseaseStrong(cand3) && !startsWithDisease(rest3)) {
+          rec.name = cand3;
+        }
+      }
+    }
+    /* 3d 登记号之后第一个像姓名的中文段（HIS 一览表的常见版式） */
+    if (!rec.name && rec.mrn && work.indexOf(rec.mrn) >= 0) {
+      var tail = work.slice(work.indexOf(rec.mrn) + rec.mrn.length);
+      var segsA = tail.match(/[\u4e00-\u9fa5]{2,4}/g) || [];
+      for (i = 0; i < segsA.length; i++) {
+        if (looksLikeName(segsA[i]) && !hasDiseaseStrong(segsA[i])) { rec.name = segsA[i]; break; }
+      }
+    }
+    /* 3e 兜底：第一段"像姓名"的中文（排除病区名、诊断、字段名） */
+    if (!rec.name) {
+      var segsB = work.match(/[\u4e00-\u9fa5]{2,4}/g) || [];
+      for (i = 0; i < segsB.length; i++) {
+        var sB = segsB[i];
+        if (looksLikeName(sB) && !looksLikeWard(sB) && !hasDiseaseAny(sB)) { rec.name = sB; break; }
+      }
+    }
+
+    /* 4) 床号：优先"X床"、"床号 12"，再退到行首裸数字、登记号前面的裸数字 */
+    m = work.match(/(?:^|[^\d])(\d{1,3})\s*床/);
+    if (m) rec.bed = m[1];
+    if (!rec.bed) { m = work.match(/床位?\s*号?\s*[:：]?\s*(\d{1,3})/); if (m) rec.bed = m[1]; }
+    if (!rec.bed) {
+      m = work.match(/^\s*[^\d\u4e00-\u9fa5]{0,3}(\d{1,3})(?![\d岁年月日号点时分])/);
+      if (m) rec.bed = m[1];
+    }
+    if (!rec.bed && rec.mrn && work.indexOf(rec.mrn) > 0) {
+      m = work.slice(0, work.indexOf(rec.mrn)).match(/(?:^|[^\d])(\d{1,3})(?![\d岁年月日号点时分])/);
+      if (m) rec.bed = m[1];
+    }
+    if (!rec.bed && b.bed) rec.bed = b.bed;
+
+    /* 5) 入院/就诊日期 */
+    m = work.match(/(20\d{2})\s*[-\/.年]\s*(\d{1,2})\s*[-\/.月]\s*(\d{1,2})/);
     if (m && +m[2] >= 1 && +m[2] <= 12 && +m[3] >= 1 && +m[3] <= 31) {
       rec.admittedAt = m[1] + '-' + pad2(m[2]) + '-' + pad2(m[3]);
     }
-
-    /* 6) 年龄：把登记号、日期、床号、姓名拿掉后，剩下的 1~3 位数字 */
-    var rest = work;
-    if (rec.mrn) rest = rest.replace(rec.mrn, ' ');
-    if (rec.admittedAt) rest = rest.replace(/\d{4}[-\/.]\d{1,2}[-\/.]\d{1,2}/, ' ');
-    /* 把床号本身从余下文字里拿掉，否则它会被当成年龄（1床就会变成"1岁"） */
-    if (rec.bed) {
-      var bedRe = new RegExp('(^|[^\\d])' + rec.bed.replace(/([.*+?^${}()|[\]\\])/g, '\\$1') + '(?![\\d])');
-      rest = rest.replace(bedRe, ' ');
+    if (!rec.admittedAt) {
+      /* "9月20号"这种没念年份的：按今年算，比今天还晚就当作去年 */
+      m = work.match(/(\d{1,2})\s*月\s*(\d{1,2})\s*[日号]/);
+      if (m && +m[1] >= 1 && +m[1] <= 12 && +m[2] >= 1 && +m[2] <= 31) {
+        var nowD = new Date();
+        var guess = new Date(nowD.getFullYear(), +m[1] - 1, +m[2]);
+        if (guess.getTime() - nowD.getTime() > 86400000) {
+          guess = new Date(nowD.getFullYear() - 1, +m[1] - 1, +m[2]);
+        }
+        rec.admittedAt = guess.getFullYear() + '-' + pad2(guess.getMonth() + 1) + '-' + pad2(guess.getDate());
+      }
     }
-    if (rec.name) rest = rest.replace(rec.name, ' ');
-    m = rest.match(/(\d{1,3})\s*岁/);
+
+    /* 6) 年龄：先认"68岁/年龄:68"，认不到再从剩下的数字里挑 */
+    m = work.match(/(\d{1,3})\s*岁/) || work.match(/年龄\s*[:：]?\s*(\d{1,3})/);
     if (m) rec.age = String(+m[1]);
-    else {
-      var cands = rest.match(/(?:^|[^\d])(\d{1,3})(?!\d)/g) || [];
-      for (var k = 0; k < cands.length; k++) {
-        var v = cands[k].replace(/[^\d]/g, '');
-        if (+v >= 1 && +v <= 120) { rec.age = String(+v); break; }
+    if (!rec.age) {
+      var rest = work;
+      if (rec.mrn) rest = rest.replace(rec.mrn, ' ');
+      if (rec.admittedAt) rest = rest.replace(/\d{4}[-\/.]\d{1,2}[-\/.]\d{1,2}/, ' ').replace(/\d{1,2}月\d{1,2}[日号]/, ' ');
+      /* 把床号本身拿掉，否则它会被当成年龄（1床就变成"1岁"） */
+      if (rec.bed) {
+        var bedRe = new RegExp('(^|[^\\d])' + String(rec.bed).replace(/([.*+?^${}()|[\]\\])/g, '\\$1') + '(?![\\d])');
+        rest = rest.replace(bedRe, ' ');
+      }
+      if (rec.name) rest = rest.replace(rec.name, ' ');
+      var cands = rest.match(/(?:^|[^\d])(\d{1,3})(?![\d岁年月日号点时分])/g) || [];
+      for (i = 0; i < cands.length; i++) {
+        var v1 = cands[i].replace(/[^\d]/g, '');
+        if (+v1 >= 1 && +v1 <= 120) { rec.age = String(+v1); break; }
       }
     }
 
-    /* 7) 姓名兜底：登记号之后第一个像姓名的中文段 */
-    if (!rec.name) {
-      var scope = mrnIdx >= 0 ? work.slice(mrnIdx + rec.mrn.length) : work;
-      var segs0 = scope.match(/[\u4e00-\u9fa5]{2,}/g) || [];
-      for (var k2 = 0; k2 < segs0.length; k2++) {
-        var s0 = segs0[k2].replace(/[男女]$/, function (c) { return s0.length > 3 ? '' : c; });
-        if (looksLikeName(s0)) { rec.name = s0; break; }
-      }
-    }
-
-    /* 8) 诊断：只在出现明确的疾病关键词时才认，认不出就留空，绝不瞎猜 */
-    var segs = work.match(/[\u4e00-\u9fa5]{2,}/g) || [];
+    /* 7) 诊断：只在出现明确的疾病关键词时才认，认不出就留空，绝不瞎猜 */
     var best = '', bestScore = -1;
-    for (var i = 0; i < segs.length; i++) {
+    var segs = work.match(/[\u4e00-\u9fa5]{2,}/g) || [];
+    for (i = 0; i < segs.length; i++) {
       var s = segs[i];
       if (s === rec.name || s.length < 2 || isStop(s) || looksLikeWard(s)) continue;
       var hits = 0;
@@ -2505,7 +2813,10 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
       if (score > bestScore) { best = s; bestScore = score; }
     }
     /* 语音/手打时诊断常和"岁""床"粘在一起，清掉这些杂字 */
-    rec.diagnosis = best.replace(/^[\d床号岁\s]+/, '').replace(/\s+/g, '');
+    rec.diagnosis = best
+      .replace(/^[\d床号岁\s]+/, '')
+      .replace(/^(入院诊断|出院诊断|诊断|主诉|术式|拟行|为|是|：|:)+/, '')
+      .replace(/\s+/g, '');
 
     if (!rec.name) rec.doubt.name = 1;
     if (!rec.sex) rec.doubt.sex = 1;
@@ -2700,11 +3011,42 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
     });
   }
 
+  /* 读系统剪贴板。
+     注意：iPhone 从桌面图标打开时，这个接口经常"既不成功也不报错"（一直不返回），
+     按钮看起来就像坏了。所以这里自己加一个超时，超时按失败处理，好引导用户手动粘贴。 */
+  function readClipboardText() {
+    return new Promise(function (res, rej) {
+      var done = false;
+      var t = setTimeout(function () {
+        if (!done) { done = true; rej(new Error('读剪贴板超时')); }
+      }, 1600);
+      var finish = function (fn, v) { if (!done) { done = true; clearTimeout(t); fn(v); } };
+      if (!navigator.clipboard || !navigator.clipboard.readText) {
+        finish(rej, new Error('这个浏览器没有剪贴板接口'));
+        return;
+      }
+      try {
+        Promise.resolve(navigator.clipboard.readText()).then(
+          function (v) { finish(res, v); },
+          function (e) { finish(rej, e || new Error('剪贴板被拒绝')); });
+      } catch (e) { finish(rej, e); }
+    });
+  }
+
+  /* 把光标放进粘贴框，用户可以直接长按选「粘贴」 */
+  function focusPasteBox() {
+    setTimeout(function () {
+      var ta = document.getElementById('impText');
+      if (!ta) return;
+      try { ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); } catch (e) { }
+    }, 80);
+  }
+
 
   /* ---------------- 导入界面 ---------------- */
 
   function openImport() {
-    imp = { stage: 'start', records: [], busy: false, msg: '', pct: 0, text: '' };
+    imp = { stage: 'start', records: [], busy: false, msg: '', msgErr: false, pct: 0, text: '', raw: '', lastSource: '' };
     openSheet({
       title: '拍照识别导入',
       hideOk: true,
@@ -2768,18 +3110,25 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
       return h;
     }
     if (imp.stage === 'paste') {
-      h += '<div class="hint" style="margin-bottom:8px;line-height:1.7">把文字粘贴到下面，三种来源都行：<br>' +
-        '· <b>截图后用苹果「实况文本」</b>全选复制 → 点下面「从剪贴板粘贴」（最准）<br>' +
-        '· 点输入框，用键盘上的<b>麦克风说话</b>逐条念（最快）。<b>每位都要先说床号</b>，例如：<br>' +
+      h += '<div class="hint" style="margin-bottom:8px;line-height:1.7">把文字弄到下面，四种来源都行：<br>' +
+        '· <b>长按下面输入框 → 点「粘贴」</b>（最稳，粘完自动识别）<br>' +
+        '· 点「从剪贴板粘贴」（少数 iPhone 会拦住它，拦住了就用上一条）<br>' +
+        '· 点输入框，用键盘上的<b>麦克风说话</b>逐条念（最快）。先说床号最保险，但<b>谁先说谁后说都行，汉字数字也认</b>：<br>' +
         '　　"12床 王秀兰 女 68岁 右股骨颈骨折"<br>' +
-        '　　连着念也行，程序会自动按"XX床"切开<br>' +
+        '　　"王秀兰 女 六十八岁 十二床 右股骨颈骨折"（这样也行）<br>' +
+        '　　连着念也行，程序会自动切开每一位患者<br>' +
         '· 直接手打</div>';
-      h += '<div class="btnrow" style="margin-bottom:8px"><button class="btn sm" data-act="imp-clip">从剪贴板粘贴</button></div>';
-      h += '<textarea id="impText" style="width:100%;min-height:180px;border:1px solid var(--line);border-radius:10px;padding:10px;font-size:15px;line-height:1.6" placeholder="例如：&#10;床号 姓名 性别 年龄 住院号 入院日期 入院诊断&#10;12 王秀兰 女 68 2026034512 2026-09-20 右股骨颈骨折"></textarea>';
+      h += '<div class="btnrow" style="margin-bottom:8px"><button class="btn sm" data-act="imp-clip">从剪贴板粘贴</button>' +
+        ((imp.raw && imp.lastSource === 'paste') ? '<button class="btn sm" data-act="imp-raw">查看刚粘的文字</button>' : '') + '</div>';
+      h += '<textarea id="impText" style="width:100%;min-height:180px;border:1px solid var(--line);border-radius:10px;padding:10px;font-size:15px;line-height:1.6" placeholder="例如：&#10;床号 姓名 性别 年龄 住院号 入院日期 入院诊断&#10;12 王秀兰 女 68 2026034512 2026-09-20 右股骨颈骨折">' +
+        esc(imp.text || '') + '</textarea>';
       h += '<div class="btnrow" style="margin-top:10px">' +
         '<button class="btn primary" data-act="imp-parse">识别内容</button>' +
         '<button class="btn" data-act="imp-back">返回</button></div>';
-      if (imp.msg) h += '<div class="hint" style="margin-top:10px;color:var(--danger)">' + esc(imp.msg) + '</div>';
+      if (imp.msg) {
+        h += '<div class="hint" style="margin-top:10px;line-height:1.8' +
+          (imp.msgErr ? ';color:var(--danger)' : '') + '">' + esc(imp.msg) + '</div>';
+      }
       return h;
     }
     if (imp.stage === 'empty') {
@@ -2869,18 +3218,31 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
   function showPreview(records) {
     imp.records = markDup(records);
     if (!imp.records.length) {
+      if (imp.lastSource === 'paste') {
+        /* 粘贴进来的文字没解析出患者：把文字留在输入框里，别让用户白粘一趟 */
+        imp.stage = 'paste';
+        imp.msgErr = true;
+        imp.msg = '没能从这段文字里认出患者。' +
+          '可以点「查看刚粘的文字」，把它复制发给我，我按你们 HIS 的版式加解析规则；' +
+          '也可以先改一改再点「识别内容」（每位患者要能看出床号，例如「12床 王秀兰 女 68岁」）。';
+        refreshImport();
+        return;
+      }
       imp.stage = 'start';
+      imp.msgErr = true;
       imp.msg = '没识别出患者。可以换张更清楚的照片，或者用「粘贴文字」。';
       refreshImport();
       return;
     }
     imp.stage = 'preview';
     imp.msg = '';
+    imp.msgErr = false;
     refreshImport();
   }
 
   /* 粘贴/语音进来的文字：配了 AI 就先让 AI 整理，失败就用本机解析 */
   function parseTextSmart(text) {
+    if (imp) { imp.lastSource = 'paste'; imp.text = text; imp.raw = text; }
     if (!aiConfigured() || !imp) return Promise.resolve(parseHisText(text));
     imp.stage = 'busy';
     imp.msg = '正在让 AI 整理（' + aiHost() + '）…';
@@ -2897,6 +3259,7 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
   function startRecognize(file, tryDepth, skipAi) {
     tryDepth = tryDepth || 0;
     if (file) imp.lastFile = file;
+    if (tryDepth === 0) imp.lastSource = 'photo';
 
     /* 模式一：直接让视觉大模型看图（失败就自动退回本机识别） */
     if (!skipAi && tryDepth === 0 && aiConfigured() && aiMode() === 'vision') {
@@ -3067,18 +3430,49 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
       }
       if (act === 'imp-paste') { imp.stage = 'paste'; imp.msg = ''; refreshImport(); return; }
       if (act === 'imp-clip') {
-        var ta1 = document.getElementById('impText');
-        var fill = function (t) {
-          if (!t || !t.trim()) { toast('剪贴板是空的'); return; }
-          if (ta1) ta1.value = t;
-          parseTextSmart(t).then(function (rs) { if (imp) showPreview(rs); });   /* 粘完直接解析 */
-        };
-        if (navigator.clipboard && navigator.clipboard.readText) {
-          navigator.clipboard.readText().then(fill, function () { toast('请长按输入框手动粘贴'); });
-        } else toast('请长按输入框手动粘贴');
+        imp.msgErr = false;
+        imp.msg = '正在读取剪贴板…';
+        refreshImport();
+        readClipboardText().then(function (t) {
+          if (!imp) return;
+          imp.msg = '';
+          if (!t || !t.trim()) {
+            imp.msgErr = true;
+            imp.msg = '剪贴板是空的。请先在相册/文档里复制好文字，再来点这个按钮；或者长按下面的输入框手动粘贴。';
+            refreshImport();
+            focusPasteBox();
+            return;
+          }
+          var fresh = document.getElementById('impText');
+          if (fresh) fresh.value = t;
+          parseTextSmart(t).then(function (rs) { if (imp) showPreview(rs); },
+            function () {
+              if (!imp) return;
+              imp.msgErr = true;
+              imp.msg = '解析失败。请长按输入框，确认文字已经粘进去，再点「识别内容」。';
+              refreshImport();
+            });
+        }, function () {
+          if (!imp) return;
+          imp.msgErr = true;
+          imp.msg = '这台手机不让网页自己读剪贴板（iPhone 从桌面图标打开时很常见，不是坏了）。' +
+            '请改用这两步：① 长按下面的输入框 → 点「粘贴」；② 文字出现后会自动识别。';
+          refreshImport();
+          focusPasteBox();
+        });
         return;
       }
-      if (act === 'imp-back') { imp.stage = 'start'; imp.msg = ''; imp.records = []; refreshImport(); return; }
+      if (act === 'imp-back') {
+        /* 从"查看原始文字"返回时，如果是粘贴来的，退回粘贴页（文字还在） */
+        var backTo = (imp.stage === 'raw' && imp.lastSource === 'paste') ? 'paste' : 'start';
+        imp.stage = backTo;
+        imp.msg = '';
+        imp.msgErr = false;
+        if (backTo === 'start') imp.records = [];
+        refreshImport();
+        if (backTo === 'paste') focusPasteBox();
+        return;
+      }
       if (act === 'imp-mode') {
         setOcrMode(el.dataset.mode);
         refreshImport();
@@ -3108,7 +3502,13 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
       if (act === 'imp-parse') {
         var ta = document.getElementById('impText');
         var text = ta ? ta.value : '';
-        if (!text.trim()) { imp.msg = '请先粘贴文字'; refreshImport(); return; }
+        if (!text.trim()) {
+          imp.msgErr = true;
+          imp.msg = '还没有文字。请长按输入框 → 点「粘贴」，或者用键盘上的麦克风念一遍。';
+          refreshImport();
+          focusPasteBox();
+          return;
+        }
         parseTextSmart(text).then(function (rs) { if (imp) showPreview(rs); });
         return;
       }
@@ -3139,6 +3539,55 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
         return;
       }
       if (act === 'imp-do') { doImportSelected(); return; }
+    });
+
+    /* 手动粘贴：不管用户是长按输入框点「粘贴」，还是在别处粘贴，
+       只要粘进来看起来有内容，就自动识别 —— 免去"粘完还要再点一次"的麻烦。 */
+    var pasteTimer = null;
+    var pasteBusy = false;
+    function acceptPastedText(t) {
+      if (!imp || imp.stage !== 'paste' || pasteBusy) return;
+      t = String(t || '');
+      if (!t.trim()) return;
+      pasteBusy = true;
+      imp.text = t;
+      imp.msg = '';
+      imp.msgErr = false;
+      var ta = document.getElementById('impText');
+      if (ta) ta.value = t;
+      parseTextSmart(t).then(function (rs) {
+        pasteBusy = false;
+        if (imp) showPreview(rs);
+      }, function () { pasteBusy = false; });
+    }
+    document.addEventListener('paste', function (ev) {
+      if (!imp || imp.stage !== 'paste') return;
+      var t = '';
+      try {
+        var cd = ev.clipboardData || window.clipboardData;
+        if (cd) t = cd.getData('text/plain') || cd.getData('text') || '';
+      } catch (e) { }
+      if (!t) {
+        /* 拿不到剪贴板内容（个别 iOS 版本会这样）：等系统把字插进输入框后再读一次 */
+        var ta = document.getElementById('impText');
+        if (ta) setTimeout(function () { acceptPastedText(ta.value); }, 30);
+        return;
+      }
+      if (ev.preventDefault) ev.preventDefault();
+      acceptPastedText(t);
+    });
+    document.addEventListener('input', function (ev) {
+      if (!imp || imp.stage !== 'paste') return;
+      var ta = ev.target;
+      if (!ta || ta.id !== 'impText') return;
+      /* imp.text 就是"上一次渲染进输入框的文字"，用它来判断这一次是不是一次插入了一大段 */
+      var inserted = ta.value.length - String(imp.text || '').length;
+      imp.text = ta.value;
+      /* 一次插进来一大段字（长按粘贴在个别 iOS 上不触发 paste 事件）→ 自动识别 */
+      if (inserted >= 12 && ta.value.trim().length >= 12) {
+        clearTimeout(pasteTimer);
+        pasteTimer = setTimeout(function () { acceptPastedText(ta.value); }, 1000);
+      }
     });
     /* 事件先绑好，再检查是否需要提示"相机导致页面重载" */
     checkCameraRecovery();
@@ -3199,8 +3648,43 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
   function dstr(d) { return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()); }
   function dtstr(d, hh, mm) { return dstr(d) + 'T' + pad2(hh) + ':' + pad2(mm); }
 
+  /* 语音转文字常把"九月二十号""下午三点半"写成汉字数字。
+     这里只在"像时间"的地方换成阿拉伯数字；内容里的"一点疼""十分干净"不会被改。 */
+  function voiceWhenFix(t) {
+    var CN = '[一二三四五六七八九十两零〇]{1,4}';
+    var out = String(t || '');
+    out = out.replace(new RegExp('(' + CN + ')\\s*月\\s*(' + CN + ')\\s*[日号]', 'g'), function (all, a, b) {
+      var mo = cnNum(a), dd = cnNum(b);
+      return (isNaN(mo) || isNaN(dd)) ? all : mo + '月' + dd + '号';
+    });
+    out = out.replace(new RegExp('(' + CN + ')\\s*[日号]', 'g'), function (all, a) {
+      var dd = cnNum(a);
+      return isNaN(dd) ? all : dd + '号';
+    });
+    out = out.replace(new RegExp('(早上|上午|早晨|中午|下午|晚上|夜里|傍晚|凌晨)?\\s*(' + CN + ')\\s*[点时]\\s*(半|(' + CN + ')\\s*分)?', 'g'),
+      function (all, per, h, rest, mnum) {
+        if (!per && !rest) return all;          /* "有一点疼"这种不动 */
+        var hv = cnNum(h);
+        if (isNaN(hv)) return all;
+        var tail = '';
+        if (rest === '半') tail = '半';
+        else if (mnum) { var mv = cnNum(mnum); if (!isNaN(mv)) tail = mv + '分'; }
+        return (per || '') + hv + '点' + tail;
+      });
+    out = out.replace(new RegExp('(' + CN + ')\\s*天', 'g'), function (all, a) {
+      var n = cnNum(a);
+      return isNaN(n) ? all : n + '天';
+    });
+    out = out.replace(/([一二三四五六七八九十零〇]{2,4})\s*年/g, function (all, a) {
+      var y = cnNumToInt(a);
+      return (isNaN(y) || y < 1900) ? all : y + '年';
+    });
+    return out;
+  }
+
   /* ---------- 从一句话里抠出时间 ---------- */
   function extractWhen(t) {
+    t = voiceWhenFix(t);
     var now = new Date(), base = null, hh = null, mm = 0, period = 0;
     if (/前天/.test(t)) base = new Date(now.getTime() - 2 * 86400000);
     else if (/昨天|昨日/.test(t)) base = new Date(now.getTime() - 86400000);
@@ -3241,6 +3725,7 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
 
   /* ---------- 计划复查日期 ---------- */
   function extractNext(t) {
+    t = voiceWhenFix(t);
     var now = new Date(), d = null;
     var m = t.match(/([一二三四五六七八九十两\d]+)\s*天\s*(?:后|之后)?[^。；;,，]{0,4}复查/);
     if (m) { var n = cnNum(m[1]); if (!isNaN(n) && n > 0 && n < 400) d = new Date(now.getTime() + n * 86400000); }
@@ -3269,6 +3754,8 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
       .replace(/^(早上|上午|早晨|中午|下午|晚上|夜里|傍晚)\s*/, '')
       .replace(/^\d{1,2}\s*[点时](半|\d{1,2}\s*分?)?\s*/, '')
       .replace(/^\d{1,2}月\d{1,2}[日号]\s*/, '')
+      .replace(/^[一二三四五六七八九十两]{1,3}\s*[点时](半|[一二三四五六七八九十两]{1,3}\s*分?)?\s*/, '')
+      .replace(/^[一二三四五六七八九十]{1,3}月[一二三四五六七八九十]{1,3}[日号]\s*/, '')
       .replace(/^(复查|检查)结果?[是为：:]\s*/, '')
       .replace(/\s+/g, '')
       .trim();
