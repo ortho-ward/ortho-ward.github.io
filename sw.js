@@ -1,5 +1,5 @@
 /* 查房本 离线缓存 Service Worker（由构建脚本生成，版本号随内容自动变化） */
-var CACHE = 'wardround-76db37401a';
+var CACHE = 'wardround-15d0bb3063';
 var ASSETS = [
   './',
   './index.html',

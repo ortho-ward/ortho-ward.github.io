@@ -2060,6 +2060,87 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
         if (rs[0].diagnosis.indexOf('股骨颈骨折') < 0) return '诊断：' + rs[0].diagnosis;
         return true;
       });
+      chk('识别解析：4 位床号 + 与时间黏在一起（真实粘贴样本）', function () {
+        /* 医生从 HIS 里复制出来的样子：制表符分列，床号 4 位，
+           而且床号、手术时间跟前后文字一个分隔符都没有 */
+        var head = ['床号', '姓名', '性别', '入院年龄', '诊断', '入院日期', '手术时间'];
+        var rows = [
+          ['2002床', '石磊', '男', '33岁', '双肾结石伴有积水和感染', '2026-10-02 14:32', '2026-10-05 09:00'],
+          ['2016床', '刘新炎', '男', '64岁', '右侧输尿管结石伴有积才', '2026-09-29 12:19', '2026-09-30 12:43'],
+          ['2020床', '李和青', '男', '57岁', '膀胱占位性病变', '2026-10-02 10:54', ''],
+          ['2023床', '陈华才', '男', '72岁', '恶性肿瘤维持性化学治疗', '2026-09-29 08:34', ''],
+          ['2024床', '叶有土', '男', '63岁', '左肾结石伴有积水和感染', '2026-09-29 16:22', ''],
+          ['2027床', '张春仙', '女', '81岁', '左侧输尿管结石伴有积水', '2026-09-29 08:30', '2026-10-02 08:00'],
+          ['2029床', '贾宪笔', '男', '55岁', '左侧输尿管结石伴有积水', '2026-09-28 09:53', '2026-10-05 08:00'],
+          ['2030床', '陈日强', '男', '71岁', '', '2026-10-05 08:18', ''],
+          ['2036床', '杭延达', '男', '39岁', '左侧输尿管结石伴有积水', '2026-10-04 16:25', ''],
+          ['2038床', '邵远鸯', '女', '47岁', '尿道囊肿', '2026-10-04 08:52', '2026-10-05 11:00']
+        ];
+        var body = rows.map(function (c) {
+          return c.filter(function (x) { return x !== ''; }).join('\t');
+        }).join('');
+        var want = [
+          ['2002', '石磊', '男', '33', '', '2026-10-02', '2026-10-05 09:00'],
+          ['2016', '刘新炎', '男', '64', '', '2026-09-29', '2026-09-30 12:43'],
+          ['2020', '李和青', '男', '57', '', '2026-10-02', ''],
+          ['2023', '陈华才', '男', '72', '', '2026-09-29', ''],
+          ['2024', '叶有土', '男', '63', '', '2026-09-29', ''],
+          ['2027', '张春仙', '女', '81', '', '2026-09-29', '2026-10-02 08:00'],
+          ['2029', '贾宪笔', '男', '55', '', '2026-09-28', '2026-10-05 08:00'],
+          ['2030', '陈日强', '男', '71', '', '2026-10-05', ''],
+          ['2036', '杭延达', '男', '39', '', '2026-10-04', ''],
+          ['2038', '邵远鸯', '女', '47', '', '2026-10-04', '2026-10-05 11:00']
+        ];
+        /* 这条样本里有患者整列诊断是空的（2030 床），所以不能直接用 checkParsed
+           （它要求每条都有诊断），改成自己逐字段比对 */
+        var labels = ['床号', '姓名', '性别', '年龄', '住院号', '入院日期', '手术时间'];
+        function cmp(rs, tag) {
+          if (rs.length !== want.length) return tag + '解析出 ' + rs.length + ' 条，应为 ' + want.length + ' 条';
+          for (var i = 0; i < want.length; i++) {
+            var got = [rs[i].bed, rs[i].name, rs[i].sex, rs[i].age, rs[i].mrn, rs[i].admittedAt, rs[i].surgeryAt || ''];
+            for (var j = 0; j < labels.length; j++) {
+              if (got[j] !== want[i][j]) {
+                return tag + '第' + (i + 1) + '条' + labels[j] + '：应为「' + want[i][j] + '」，实际「' + got[j] + '」';
+              }
+            }
+          }
+          return true;
+        }
+        /* A：完全按粘过来的样子（行与行之间没有换行） */
+        var rA = cmp(parseHisText(head.join('\t') + body), '无换行版：');
+        if (rA !== true) return rA;
+        /* B：HIS 里一行一位患者（有换行） */
+        var rB = cmp(parseHisText(head.join('\t') + '\n' + rows.map(function (c) {
+          return c.filter(function (x) { return x !== ''; }).join('\t');
+        }).join('\n')), '有换行版：');
+        if (rB !== true) return rB;
+        /* 诊断别把日期/床号混进去，该留空的要留空 */
+        var rs = parseHisText(head.join('\t') + body);
+        if (rs[0].diagnosis !== '双肾结石伴有积水和感染') return '第1条诊断：' + rs[0].diagnosis;
+        if (rs[4].diagnosis !== '左肾结石伴有积水和感染') return '第5条诊断：' + rs[4].diagnosis;
+        if (rs[7].diagnosis !== '') return '第8条本该没有诊断，实际：' + rs[7].diagnosis;
+        return true;
+      });
+      chk('识别解析：4 位床号（HIS 表格里的裸数字列）', function () {
+        var t = '床号 姓名 性别 年龄 住院号 入院日期 入院诊断\n' +
+          '2002 石磊 男 33 2026034512 2026-10-02 右肾结石伴感染\n' +
+          '2016 刘新炎 男 64 2026034518 2026-09-29 右侧输尿管结石';
+        var rs = parseHisText(t);
+        if (rs.length !== 2) return '解析出 ' + rs.length + ' 条，应为 2 条';
+        if (rs[0].bed !== '2002' || rs[0].name !== '石磊' || rs[0].age !== '33') {
+          return '第1条：' + [rs[0].bed, rs[0].name, rs[0].age].join('/');
+        }
+        if (rs[1].bed !== '2016' || rs[1].name !== '刘新炎') return '第2条：' + [rs[1].bed, rs[1].name].join('/');
+        if (rs[0].admittedAt !== '2026-10-02') return '第1条日期：' + rs[0].admittedAt;
+        return true;
+      });
+      chk('识别解析：念出来的 4 位床号（二零零二床）', function () {
+        var rs = parseHisText('二零零二床 石磊 男 三十三岁 双肾结石伴有感染');
+        if (rs.length !== 1) return '解析出 ' + rs.length + ' 条';
+        if (rs[0].bed !== '2002' || rs[0].age !== '33') return '床号/年龄：' + [rs[0].bed, rs[0].age].join('/');
+        if (rs[0].name !== '石磊') return '姓名：' + rs[0].name;
+        return true;
+      });
       chk('语音解析：一句话抠出时间/内容/处理/复查', function () {
         var v = parseUtterance('今天早上血常规白细胞12.3升高，处理是加用抗生素，三天后复查', 'event');
         if (v.at.indexOf(todayStr() + 'T08:00') !== 0) return '时间不对：' + v.at;
@@ -2485,7 +2566,8 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
     '二级', '三级', '特级', '普通', '医保', '自费', '床位', '患者', '总数', '一览表', '列表', '住院', '费别',
     '病情', '责任', '主治', '主任', '医疗', '组别', '床号姓名', '总人数', '在院', '入院', '天数',
     '图标菜单', '护士拒绝', '入径', '未入径', '入径状态', '本人病人', '本科病人', '本单元病人', '在院患者',
-    '手术患者', '危重患者', '出院患者', '病人', '就诊日期', '登记', '菜单'];
+    '手术患者', '危重患者', '出院患者', '病人', '就诊日期', '登记', '菜单',
+    '入院年龄', '入院时间', '手术时间', '手术日期', '出院日期', '出院时间', '住院天数', '一览'];
 
   var DISEASE_KW = ['骨折', '脱位', '坏死', '狭窄', '感染', '结石', '疝', '畸形', '结核', '骨质疏松',
     '椎间盘', '滑脱', '囊肿', '积液', '血栓', '水肿', '衰竭', '肿瘤', '关节炎', '骨病', '腱鞘', '断裂',
@@ -2568,6 +2650,19 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
       .replace(/[：]/g, ':');
     /* 汉字数字（只在上下文明确的地方替换） */
     t = cnNumInContext(t);
+    /* HIS 一览表里床号常常是 4 位数，而且和前后文字挤在一起、一个分隔符都没有：
+       "…手术时间2002床 石磊 男…"、"…2026-10-05 09:002016床 刘新炎 男…"。
+       先把每个"床号+床"挪到行首，后面按行切分就不会串到上一位患者身上。
+       （1~3 位床号只在前面不是汉字时切开，免得把"共20床"这种也当成患者） */
+    t = t.replace(/(\d{4})\s*床/g, function (all, n, at, whole) {
+      /* 前面如果还连着数字，只有"…09:002016床"这种时间紧贴床号的情况才切开，
+         避免把"2026034512床"这类长数字串拆错 */
+      if (/\d/.test(whole.charAt(at - 1)) && !/\d{1,2}\s*[:：]\s*\d{1,2}$/.test(whole.slice(Math.max(0, at - 6), at))) {
+        return all;
+      }
+      return '\n' + n + '床';
+    });
+    t = t.replace(/(^|[^\u4e00-\u9fa5\d])(\d{1,3})\s*床/g, '$1\n$2床');
     return t
       .split('\n').map(function (l) { return l.replace(/^\s+|\s+$/g, ''); }).join('\n');
   }
@@ -2597,11 +2692,16 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
      只有"这一条已经有这个字段了，又出现一次"，才算下一位患者。 */
   function anchorsIn(line, nextLine) {
     var out = [], m, re, at;
-    /* ① X床 */
-    re = /(\d{1,3})\s*床/g;
+    /* ① X床（1~4 位数字都算，HIS 里床号常是 2002、2016 这种四位数） */
+    re = /(\d{1,4})\s*床/g;
     while ((m = re.exec(line)) !== null) {
       at = m.index;
-      if (at > 0 && /\d/.test(line.charAt(at - 1))) continue;
+      /* 前面紧挨着数字的：只有"…09:002016床"这种"时间+4位床号"才认，
+         免得把"2026034512床"这类长数字串当成床号 */
+      if (at > 0 && /\d/.test(line.charAt(at - 1))) {
+        var beforeBed = line.slice(Math.max(0, at - 6), at);
+        if (!(m[1].length === 4 && /\d{1,2}\s*[:：]\s*\d{1,2}$/.test(beforeBed))) continue;
+      }
       out.push({ at: at, kind: 'bed', bed: m[1] });
     }
     /* ② 姓名+性别（口语里常有逗号："王秀兰，女"） */
@@ -2614,8 +2714,9 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
       at = m.index + (m[0].length - m[0].replace(/^\D/, '').length);
       out.push({ at: at, kind: 'mrn' });
     }
-    /* ④ 行首裸数字（表格第一列就是床号）。竖排记录里孤零零的数字不当作床号 */
-    m = line.match(/^\s*[^\d\u4e00-\u9fa5]{0,3}(\d{1,3})(?![\d岁年月日号点时分])\s*(.*)$/);
+    /* ④ 行首裸数字（表格第一列就是床号）。竖排记录里孤零零的数字不当作床号。
+          床号可能是 4 位数（2002），但"2026-10-02"这种日期不算床号 */
+    m = line.match(/^\s*[^\d\u4e00-\u9fa5]{0,3}(\d{1,4})(?![\d岁年月日号点时分])(?!\s*[-\/.])\s*(.*)$/);
     if (m) {
       var rest = m[2] || '';
       var nextName = nextLine ? looksLikeName(String(nextLine).replace(/\s+/g, '')) : false;
@@ -2677,7 +2778,8 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
 
   function parseBlock(b) {
     var rec = {
-      bed: '', name: '', sex: '', age: '', mrn: '', admittedAt: '', diagnosis: '', doubt: {}
+      bed: '', name: '', sex: '', age: '', mrn: '', admittedAt: '',
+      surgeryDate: '', surgeryTime: '', surgeryAt: '', diagnosis: '', doubt: {}
     };
     var work = String(b.text || '').replace(/[，,、]/g, ' ').replace(/\s+/g, ' ').replace(/^\s+|\s+$/g, '');
     var m, i;
@@ -2719,7 +2821,7 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
     }
     /* 3c "12床 王秀兰"、"12床女患者王秀兰"：姓名紧跟着床号 */
     if (!rec.name) {
-      var mBed = work.match(/\d{1,3}\s*床\s*[:：]?\s*(.*)$/);
+      var mBed = work.match(/\d{1,4}\s*床\s*[:：]?\s*(.*)$/);
       if (mBed) {
         var after = mBed[1].replace(/^\s*的?\s*/, '')
           .replace(/^(患者|病人|女患者|男患者)/, '').replace(/^[男女]/, '')
@@ -2748,24 +2850,37 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
       }
     }
 
-    /* 4) 床号：优先"X床"、"床号 12"，再退到行首裸数字、登记号前面的裸数字 */
-    m = work.match(/(?:^|[^\d])(\d{1,3})\s*床/);
+    /* 4) 床号：优先"X床"、"床号 12"，再退到行首裸数字、登记号前面的裸数字
+          床号可能是 4 位数（2002床），所以这里都放宽到 1~4 位；
+          同时排除日期，免得把"2026-10-02"当床号。 */
+    m = work.match(/(?:^|[^\d])(\d{1,4})\s*床/);
     if (m) rec.bed = m[1];
-    if (!rec.bed) { m = work.match(/床位?\s*号?\s*[:：]?\s*(\d{1,3})/); if (m) rec.bed = m[1]; }
+    if (!rec.bed) { m = work.match(/床位?\s*号?\s*[:：]?\s*(\d{1,4})/); if (m) rec.bed = m[1]; }
     if (!rec.bed) {
-      m = work.match(/^\s*[^\d\u4e00-\u9fa5]{0,3}(\d{1,3})(?![\d岁年月日号点时分])/);
+      m = work.match(/^\s*[^\d\u4e00-\u9fa5]{0,3}(\d{1,4})(?![\d岁年月日号点时分])(?!\s*[-\/.])/);
       if (m) rec.bed = m[1];
     }
     if (!rec.bed && rec.mrn && work.indexOf(rec.mrn) > 0) {
-      m = work.slice(0, work.indexOf(rec.mrn)).match(/(?:^|[^\d])(\d{1,3})(?![\d岁年月日号点时分])/);
+      m = work.slice(0, work.indexOf(rec.mrn)).match(/(?:^|[^\d])(\d{1,4})(?![\d岁年月日号点时分])(?!\s*[-\/.])/);
       if (m) rec.bed = m[1];
     }
     if (!rec.bed && b.bed) rec.bed = b.bed;
 
-    /* 5) 入院/就诊日期 */
-    m = work.match(/(20\d{2})\s*[-\/.年]\s*(\d{1,2})\s*[-\/.月]\s*(\d{1,2})/);
-    if (m && +m[2] >= 1 && +m[2] <= 12 && +m[3] >= 1 && +m[3] <= 31) {
-      rec.admittedAt = m[1] + '-' + pad2(m[2]) + '-' + pad2(m[3]);
+    /* 5) 入院/就诊日期，以及后面的"手术时间"
+          一览表的列顺序是"入院日期 → 手术时间"，所以第一个日期算入院，第二个算手术。 */
+    var dts = [], reDt = /(20\d{2})\s*[-\/.年]\s*(\d{1,2})\s*[-\/.月]\s*(\d{1,2})(?:\s*[T ]\s*(\d{1,2})\s*[:：]\s*(\d{1,2}))?/g;
+    while ((m = reDt.exec(work)) !== null) {
+      if (!(+m[2] >= 1 && +m[2] <= 12 && +m[3] >= 1 && +m[3] <= 31)) continue;
+      dts.push({
+        date: m[1] + '-' + pad2(m[2]) + '-' + pad2(m[3]),
+        time: m[4] ? (pad2(m[4]) + ':' + pad2(m[5])) : ''
+      });
+    }
+    if (dts.length) rec.admittedAt = dts[0].date;
+    if (dts.length > 1) {
+      rec.surgeryDate = dts[1].date;
+      rec.surgeryTime = dts[1].time;
+      rec.surgeryAt = dts[1].date + (dts[1].time ? ' ' + dts[1].time : '');
     }
     if (!rec.admittedAt) {
       /* "9月20号"这种没念年份的：按今年算，比今天还晚就当作去年 */
@@ -2786,7 +2901,10 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
     if (!rec.age) {
       var rest = work;
       if (rec.mrn) rest = rest.replace(rec.mrn, ' ');
-      if (rec.admittedAt) rest = rest.replace(/\d{4}[-\/.]\d{1,2}[-\/.]\d{1,2}/, ' ').replace(/\d{1,2}月\d{1,2}[日号]/, ' ');
+      /* 日期、时间统统拿掉，否则"09:00"里的 09 会被当成年龄 */
+      rest = rest.replace(/\d{4}\s*[-\/.]\s*\d{1,2}\s*[-\/.]\s*\d{1,2}/g, ' ')
+        .replace(/\d{1,2}\s*[:：]\s*\d{1,2}/g, ' ')
+        .replace(/\d{1,2}\s*月\s*\d{1,2}\s*[日号]/g, ' ');
       /* 把床号本身拿掉，否则它会被当成年龄（1床就变成"1岁"） */
       if (rec.bed) {
         var bedRe = new RegExp('(^|[^\\d])' + String(rec.bed).replace(/([.*+?^${}()|[\]\\])/g, '\\$1') + '(?![\\d])');
@@ -2842,11 +2960,11 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
   /* 自检用：比对解析结果与期望值 */
   function checkParsed(rs, want) {
     if (rs.length !== want.length) return '解析出 ' + rs.length + ' 条，应为 ' + want.length + ' 条';
-    var labels = ['床号', '姓名', '性别', '年龄', '住院号', '入院日期'];
+    var labels = ['床号', '姓名', '性别', '年龄', '住院号', '入院日期', '手术时间'];
     for (var i = 0; i < want.length; i++) {
       var r = rs[i], w = want[i];
-      var got = [r.bed, r.name, r.sex, r.age, r.mrn, r.admittedAt];
-      for (var j = 0; j < got.length; j++) {
+      var got = [r.bed, r.name, r.sex, r.age, r.mrn, r.admittedAt, r.surgeryAt || ''];
+      for (var j = 0; j < w.length; j++) {
         if (got[j] !== w[j]) {
           return '第' + (i + 1) + '条' + labels[j] + '：应为「' + w[j] + '」，实际「' + got[j] + '」';
         }
@@ -2934,6 +3052,16 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
     return JSON.parse(m[0]);
   }
 
+  /* "2026-10-05 09:00" → {date:'2026-10-05', time:'09:00'}；认不出就都给空 */
+  function splitDateTime(s) {
+    var m = String(s || '').match(/(\d{4})\D{0,2}(\d{1,2})\D{0,2}(\d{1,2})(?:\D{0,3}(\d{1,2})\D(\d{1,2}))?/);
+    if (!m) return { date: '', time: '' };
+    return {
+      date: m[1] + '-' + pad2(m[2]) + '-' + pad2(m[3]),
+      time: m[4] ? (pad2(m[4]) + ':' + pad2(m[5])) : ''
+    };
+  }
+
   function mapAiRecords(obj) {
     var list = (obj && (obj.patients || obj.list || obj.data)) || [];
     if (!list.length && obj && obj.name) list = [obj];
@@ -2943,15 +3071,18 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
       var name = String(r.name || r.姓名 || '').trim();
       var bed = String(r.bed || r.床号 || '').trim();
       if (!name && !bed) return;
-      var date = String(r.date || r.admittedAt || r.入院日期 || r.就诊日期 || '').trim();
-      var dm = date.match(/(\d{4})\D{0,2}(\d{1,2})\D{0,2}(\d{1,2})/);
+      var dm = splitDateTime(r.date || r.admittedAt || r.入院日期 || r.就诊日期);
+      var sm = splitDateTime(r.surgery || r.surgeryAt || r.surgeryDate || r.手术时间 || r.手术日期);
       out.push({
         bed: bed,
         name: name,
         sex: String(r.sex || r.性别 || '').trim(),
         age: String(r.age || r.年龄 || '').replace(/[^\d]/g, ''),
         mrn: String(r.mrn || r.登记号 || r.住院号 || '').trim(),
-        admittedAt: dm ? (dm[1] + '-' + pad2(dm[2]) + '-' + pad2(dm[3])) : '',
+        admittedAt: dm.date,
+        surgeryDate: sm.date,
+        surgeryTime: sm.time,
+        surgeryAt: sm.date + (sm.time ? ' ' + sm.time : ''),
         diagnosis: String(r.diagnosis || r.诊断 || '').trim(),
         doubt: {}
       });
@@ -2963,11 +3094,16 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
     '你在帮一位医生把 HIS"住院患者一览表"整理成结构化数据。\n' +
     '请逐行识别其中的每位患者，只输出 JSON，不要任何解释和多余文字。\n' +
     'JSON 格式：{"patients":[{"bed":"床号","name":"姓名","sex":"男或女","age":"年龄数字",' +
-    '"mrn":"登记号或住院号","date":"入院或就诊日期(YYYY-MM-DD)","diagnosis":"诊断"}]}\n' +
+    '"mrn":"登记号或住院号","date":"入院或就诊日期(YYYY-MM-DD)","surgery":"手术时间(YYYY-MM-DD HH:MM，没有就空)",' +
+    '"diagnosis":"诊断"}]}\n' +
     '要求：\n' +
     '1. 只填你能确认的内容；看不清或该列不存在的字段，填空字符串，绝对不要猜测或编造姓名。\n' +
     '2. 一个人一条记录，顺序与画面一致。\n' +
-    '3. 姓名只要 2~4 个汉字，不要带"性别""年龄"等字样。';
+    '3. 姓名只要 2~4 个汉字，不要带"性别""年龄"等字样。\n' +
+    '4. 床号可能是 4 位数字（如 2002床、2016床），而且常和前后文字连在一起、中间没有分隔符：' +
+    '例如"手术时间2002床 石磊"里 2002 是床号，"…09:002016床 刘新炎"里 2016 是床号，' +
+    '不要把它们当成时间的一部分。\n' +
+    '5. diagnosis 只填诊断那一列，不要把床号、姓名、日期混进去；该列空白就填空。';
 
   /* 看图识别：把照片交给视觉大模型 */
   function aiRecognizeImage(file, onStage) {
@@ -3117,10 +3253,13 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
         '　　"12床 王秀兰 女 68岁 右股骨颈骨折"<br>' +
         '　　"王秀兰 女 六十八岁 十二床 右股骨颈骨折"（这样也行）<br>' +
         '　　连着念也行，程序会自动切开每一位患者<br>' +
-        '· 直接手打</div>';
+        '· 直接手打<br>' +
+        '· HIS 一览表整段复制粘贴最省事：床号 3 位、4 位都认，像"手术时间2002床 石磊 男 33岁…"、' +
+        '"…09:002016床 刘新炎…"这种一个分隔符都没有的连排也能切开；' +
+        '"入院日期"后面那一列时间会认成<b>手术时间</b>，核对页可以改。</div>';
       h += '<div class="btnrow" style="margin-bottom:8px"><button class="btn sm" data-act="imp-clip">从剪贴板粘贴</button>' +
         ((imp.raw && imp.lastSource === 'paste') ? '<button class="btn sm" data-act="imp-raw">查看刚粘的文字</button>' : '') + '</div>';
-      h += '<textarea id="impText" style="width:100%;min-height:180px;border:1px solid var(--line);border-radius:10px;padding:10px;font-size:15px;line-height:1.6" placeholder="例如：&#10;床号 姓名 性别 年龄 住院号 入院日期 入院诊断&#10;12 王秀兰 女 68 2026034512 2026-09-20 右股骨颈骨折">' +
+      h += '<textarea id="impText" style="width:100%;min-height:180px;border:1px solid var(--line);border-radius:10px;padding:10px;font-size:15px;line-height:1.6" placeholder="例如：&#10;床号 姓名 性别 年龄 住院号 入院日期 入院诊断&#10;12 王秀兰 女 68 2026034512 2026-09-20 右股骨颈骨折&#10;2002床 石磊 男 33岁 双肾结石伴有积水和感染 2026-10-02 14:32">' +
         esc(imp.text || '') + '</textarea>';
       h += '<div class="btnrow" style="margin-top:10px">' +
         '<button class="btn primary" data-act="imp-parse">识别内容</button>' +
@@ -3166,6 +3305,7 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
           '<div class="line1">' +
           '<span class="pname">' + esc(r.name || '（未识别姓名）') + '</span>' +
           '<span class="chip sm' + ((r.doubt.sex || r.doubt.age) ? ' danger' : '') + '">' + esc((r.sex || '?') + (r.age ? ' ' + r.age + '岁' : '')) + '</span>' +
+          (r.bed ? '' : '<span class="chip danger">无床号</span>') +
           (r.dup ? '<span class="chip warn">病区已有</span>' : '') +
           '</div>' +
           (r.diagnosis
@@ -3173,7 +3313,8 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
             : '<div class="pdiag hint">诊断：导入后补充</div>') +
           '<div class="pmeta">' + esc(r.bed ? r.bed + '床' : '无床号') +
           (r.mrn ? ' · 住院号 ' + esc(r.mrn) : '') +
-          (r.admittedAt ? ' · 入院 ' + esc(fmtDT(r.admittedAt)) : '') + '</div>' +
+          (r.admittedAt ? ' · 入院 ' + esc(fmtDT(r.admittedAt)) : '') +
+          (r.surgeryAt ? ' · 手术 ' + esc(fmtDT(r.surgeryAt)) : '') + '</div>' +
           '<div style="margin-top:6px"><button class="btn sm" data-act="imp-edit" data-i="' + i + '">修改</button></div>' +
           '</div></div></div>';
       });
@@ -3196,6 +3337,7 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
         '<div class="field"><label>年龄</label>' + textInput('age', r.age, '') + '</div></div>';
       h += field('住院号', textInput('mrn', r.mrn, ''));
       h += field('入院日期', textInput('admittedAt', r.admittedAt, '', 'date'));
+      h += field('手术时间', textInput('surgeryAt', r.surgeryAt, '如 2026-10-05 09:00'), '没有手术就留空');
       h += field('入院诊断', areaInput('diagnosis', r.diagnosis, ''));
       h += '<div class="btnrow" style="margin-top:4px">' +
         '<button class="btn primary" data-act="imp-edit-save">确定</button>' +
@@ -3398,6 +3540,7 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
         patients: [{
           bed: r.bed, name: r.name, sex: r.sex, age: r.age, mrn: r.mrn,
           admittedAt: r.admittedAt, diagnosis: r.diagnosis, diagnosisAt: r.admittedAt,
+          surgeryDate: r.surgeryDate || '', surgeryNote: r.surgeryTime ? ('手术时间 ' + r.surgeryTime) : '',
           herbs: [], events: [], notes: []
         }]
       }).patients[0]);
@@ -3533,6 +3676,10 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
         var rr = imp.records[imp.editIndex];
         rr.bed = v.bed; rr.name = v.name; rr.sex = v.sex; rr.age = v.age;
         rr.mrn = v.mrn; rr.admittedAt = v.admittedAt; rr.diagnosis = v.diagnosis;
+        var sm = splitDateTime(v.surgeryAt);
+        rr.surgeryDate = sm.date;
+        rr.surgeryTime = sm.time;
+        rr.surgeryAt = sm.date + (sm.time ? ' ' + sm.time : '');
         rr.doubt = {};
         imp.stage = 'preview';
         refreshImport();
